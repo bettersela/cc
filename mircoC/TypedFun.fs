@@ -110,6 +110,10 @@ let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
     match e with
     | Access acc -> TypP
     | Assign(acc, e) ->
+      let t1 = typAccess acc varEnv funEnv
+      let t2 = typExpr e varEnv funEnv
+      if t1 = t2 then t1 
+      else failwith "you have wrong between two sides of ="
     | CstI i -> TypI
     | Addr acc -> TypP
     | Prim1(ope, e1) -> 
@@ -183,11 +187,15 @@ let rec typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
     |Block stmts -> 
       let rec loop stmts varEnv = 
           match stmts with
-          | [] -> expr
+          | [] -> TypN
           | s1::sr -> 
               let (v1, t1) = typStmtOrDec s1 varEnv funEnv
               let (fdepthr, t2) = loop sr varEnv1
-          (*这里应该返回什么类型*) ------------   
+      TypN
+    | Return None -> TypN
+    | Return (Some e)->
+        typExpr e varEnv funEnv
+
 
 let typTopdec (Prog topdecs) =
   let _ = resetLabels() (*清空所有标签*)
@@ -200,7 +208,7 @@ let typTopdec (Prog topdecs) =
   List.choose(
    | Fundec(rTy, name, argTy, body) -> 
       cherkfun (rTy, name, argTy, body) 
-   | Vardec(t, var)-> t 
+   | Vardec(t, var)-> None
    )topdecs
 
 (*检查函数入口*)
