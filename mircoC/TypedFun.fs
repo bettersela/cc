@@ -21,6 +21,7 @@
 *)
 
 module TypedFun
+
 open Absyn
 open Parse
 open Machine
@@ -54,7 +55,7 @@ type FunEnv = (label * typ option * Paramdecs) Env
 
 (* Bind declared variable in env and generate code to allocate it: *)
 
-let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * typ =
+let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * instr list =
     printf "allocate called!\n"      
     let (env, fdepth) = varEnv 
     match typ with
@@ -62,11 +63,14 @@ let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * typ =
       raise (Failure "allocate: array of arrays not permitted")
     | TypA (t, Some i) -> 
       let newEnv = ((x, (kind (fdepth+i), typ)) :: env, fdepth+i+1) //数组占用 i个位置
-      (newEnv, typ)
+      let code = [INCSP i; GETSP; CSTI (i-1); SUB]
+      (newEnv, code)
     | _ -> 
-      let newEnv = ((x, (kind (fdepth), typ)) :: env, fdepth+1)      
+      let newEnv = ((x, (kind (fdepth), typ)) :: env, fdepth+1)
+      let code = [INCSP 1]
+
       printf "new varEnv: %A\n" newEnv // 调试 显示分配后环境变化
-      (newEnv, typ)
+      (newEnv, code)
 
 (* Bind declared parameters in env: *)
 
@@ -108,70 +112,76 @@ let makeGlobalEnvs (topdecs : topdec list) : VarEnv * FunEnv * instr list =
 (* 环境是什么？是env 还是varEnv和funEnv*)
 let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ = 
     match e with
-    | Access acc -> TypP
+    | Access acc -> TypI
     | Assign(acc, e) ->
       let t1 = typAccess acc varEnv funEnv
       let t2 = typExpr e varEnv funEnv
-      if t1 = t2 then t1 
-      else failwith "you have wrong between two sides of ="
+      if t1 = t2 then t1
+      else failwith "wrong!"
     | CstI i -> TypI
-    | Addr acc -> TypP
+    | Addr acc -> TypI  (*需要找一个方法把TypP找出来*)
     | Prim1(ope, e1) -> 
-        let t1 = typExpr e1 env
-        let t2 = 
+        let t1 = typExpr e1 varEnv funEnv
+        let t2 = TypN
         match ope with
-        | "!" -> TypI
-        | "printi" -> TypI
-        | "printc" -> TypC
+        | "!" -> t2 = TypI
+        | "printi" -> t2 = TypC
+        | "printc" -> t2 = TypC
         if t1 = t2 then t1
-      else failwith "You have wrong type in Prim1."
-    | Prim2(ope e1 e2)->
-        let t1 = typExpr e1 env
-      let t2 = typExpr e2 env
-      match (ope, t1, t2) with
-      | ("*", TypI, TypI) -> TypI
-      | ("+", TypI, TypI) -> TypI
-      | ("-", TypI, TypI) -> TypI
-      | ("/", TypI, TypI) -> TypI
-      | ("%", TypI, TypI) -> TypI
-      | ("==", TypI, TypI) -> TypI
-      | ("!=", TypI, TypI) -> TypI
-      | ("<", TypI, TypI) -> TypI
-      | (">=", TypI, TypI) -> TypI
-      | (">", TypI, TypI) -> TypI
-      | ("<=", TypI, TypI) -> TypI
-      | _   -> failwith "unknown op, or type error"
+        else failwith "Wrong Prim1"
+    | Prim2(ope,e1,e2)->
+        let t1 = typExpr e1 varEnv funEnv
+        let t2 = typExpr e2 varEnv funEnv
+        if t1 = t2 then t1
+        else failwith"Wrong at Prim2" 
+        match (ope, t1, t2) with
+        | ("*", TypI, TypI) -> TypI
+        | ("+", TypI, TypI) -> TypI
+        | ("-", TypI, TypI) -> TypI
+        | ("/", TypI, TypI) -> TypI
+        | ("%", TypI, TypI) -> TypI
+        | ("==", TypI, TypI) -> TypI
+        | ("!=", TypI, TypI) -> TypI
+        | ("<", TypI, TypI) -> TypI
+        | (">=", TypI, TypI) -> TypI
+        | (">", TypI, TypI) -> TypI
+        | ("<=", TypI, TypI) -> TypI
+        | _   -> failwith "unknown op, or type error"
     | Andalso(e1, e2) ->
-        t1 = typExpr e1 varEnv funEnv
-        t2 = typExpr e2 varEnv funEnv
+        let t1 = typExpr e1 varEnv funEnv
+        let t2 = typExpr e2 varEnv funEnv
         if t1 = t2 then TypI
         else failwith "Diffierent type between Andalso(e1,e2) " 
     | Orelse(e1, e2) ->
-        Andalso(e1, e2) ->
-        t1 = typExpr e1 env
-        t2 = typExpr e2 env
+        let t1 = typExpr e1 varEnv funEnv
+        let t2 = typExpr e2 varEnv funEnv
         if t1 = t2 then TypI
         else failwith "Diffierent type between Orelse(e1,e2) " 
     | Call(f, es) -> 
-        Map typExpr es varEnv funEnv
-        let (labf, tyOpt, paras) = lookup funEnv f
-        tyOpt
+        (*Map typExpr es varEnv funEnv*)
+        (*let (labf, tyOpt, paras) = lookup funEnv f
+        tyOpt*)
+        TypI
 (*如何检查list 遍历es*)
 (*Access*)
-let typAccess access varEnv funEnv : typ =
+and typAccess access varEnv funEnv : typ =
   match access with
-   | AccVar x-> lookup x(*去环境里面去找参数类型*)--------------
+   | AccVar x-> TypI
+      (*match lookup varEnv x with
+      | Glovar addr,_ -> TypI
+      | Locvar addr,_ -> TypI  (*如何用地址找到类型*)*)
    | AccDeref e -> typExpr e varEnv funEnv
    | AccIndex(acc,idx)-> typAccess acc varEnv funEnv
    | _ -> failwith"Wrong access!"
 
 (*StmtOrDec*)
-let typStmtOrDec stmtOrDec (varEnv : VarEnv) (funEnv : FunEnv) : VarEnv *typ =
+and typStmtOrDec stmtOrDec (varEnv : VarEnv) (funEnv : FunEnv) : VarEnv *typ =
   match stmtOrDec with
    | Stmt stmt -> (varEnv,typStmt stmt varEnv funEnv)
-   | Dec (typ, x)-> allocate Locvar (typ, x) varEnv
+   | Dec (typ, x)-> let (newVar,_)=allocate Locvar (typ, x) varEnv
+                    (newVar,typ)
 
-let rec typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
+and  typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
     match e with
     |If(e1,stmt1,stmt2)->
       match typExpr e1 varEnv funEnv with
@@ -185,19 +195,20 @@ let rec typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
         else failwith "Wrong with While"
     |Expr e -> typExpr e varEnv funEnv
     |Block stmts -> 
-      let rec loop stmts varEnv = 
-          match stmts with
-          | [] -> TypN
-          | s1::sr -> 
-              let (v1, t1) = typStmtOrDec s1 varEnv funEnv
-              let (fdepthr, t2) = loop sr varEnv1
-      TypN
+        let rec loop stmts varEnv = 
+            match stmts with
+            | [] -> TypN
+            | s1::sr -> 
+                let (v1, t1) = typStmtOrDec s1 varEnv funEnv
+                let (fdepthr, t2) = loop sr varEnv
+                TypN
+        loop stmts varEnv
     | Return None -> TypN
     | Return (Some e)->
         typExpr e varEnv funEnv
 
 
-let typTopdec (Prog topdecs) =
+and typTopdec (Prog topdecs) =
   let _ = resetLabels() (*清空所有标签*)
   let ((globalVarEnv, _), funEnv, globalInit) = makeGlobalEnvs topdecs
   (*这个是makeGlobalEnvs的三个返回值 其中(globalVarEnv,_)就是全局变量，funEnv就是函数变量*)
@@ -205,11 +216,12 @@ let typTopdec (Prog topdecs) =
       let (labf, _, paras) = lookup funEnv f
       let (envf, fdepthf) = bindParams paras (globalVarEnv, 0)
       let typRet = typStmt body (envf, fdepthf) funEnv
-  List.choose(
-   | Fundec(rTy, name, argTy, body) -> 
-      cherkfun (rTy, name, argTy, body) 
-   | Vardec(t, var)-> None
-   )topdecs
+      tyRet
+  List.choose(function
+                | Fundec (rTy, name, argTy, body) -> 
+                      cherkfun (rTy, name, argTy, body) 
+                | Vardec(t, var)-> None)
+              topdecs
 
 (*检查函数入口*)
 let typeCheck filename = typTopdec fromFile filename;;
