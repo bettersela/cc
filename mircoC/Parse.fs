@@ -21,7 +21,7 @@ let fromString (str : string) : program =
              
 (* Parsing from a file *)
 
-let fromFile (filename : string) =
+let fromFile (filename : string):program =
     use reader = new StreamReader(filename)
     let lexbuf = Lexing.LexBuffer<char>.FromTextReader reader
     try 

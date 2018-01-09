@@ -10,4 +10,4 @@ let fromFile = Parse.fromFile
 
 let compileToFile = Comp.compileToFile
 
-let checkType = TypedFun.typeCheck
+let checkType = TypedFun.typTopdec

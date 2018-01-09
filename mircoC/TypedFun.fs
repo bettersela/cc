@@ -25,6 +25,7 @@ module TypedFun
 open Absyn
 open Parse
 open Machine
+open System.IO
 
 (* ------------------------------------------------------------------- *)
 
@@ -197,12 +198,13 @@ and  typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
     |Block stmts -> 
         let rec loop stmts varEnv = 
             match stmts with
-            | [] -> TypN
+            | [] -> (varEnv,TypN)
             | s1::sr -> 
                 let (v1, t1) = typStmtOrDec s1 varEnv funEnv
                 let (fdepthr, t2) = loop sr varEnv
-                TypN
-        loop stmts varEnv
+                (v1,t2)
+                
+        TypN
     | Return None -> TypN
     | Return (Some e)->
         typExpr e varEnv funEnv
@@ -216,7 +218,8 @@ and typTopdec (Prog topdecs) =
       let (labf, _, paras) = lookup funEnv f
       let (envf, fdepthf) = bindParams paras (globalVarEnv, 0)
       let typRet = typStmt body (envf, fdepthf) funEnv
-      tyRet
+      printf"OK!%A\n" body
+      None
   List.choose(function
                 | Fundec (rTy, name, argTy, body) -> 
                       cherkfun (rTy, name, argTy, body) 
@@ -224,6 +227,6 @@ and typTopdec (Prog topdecs) =
               topdecs
 
 (*检查函数入口*)
-let typeCheck filename = typTopdec fromFile filename;;
+(*let typeCheck filename = typTopdec (fromFile filename);;*)
 
 
