@@ -210,7 +210,7 @@ and  typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
         typExpr e varEnv funEnv
 
 
-and typTopdec (Prog topdecs) =
+and typTopdec (Prog topdecs): typ  =
   let _ = resetLabels() (*清空所有标签*)
   let ((globalVarEnv, _), funEnv, globalInit) = makeGlobalEnvs topdecs
   (*这个是makeGlobalEnvs的三个返回值 其中(globalVarEnv,_)就是全局变量，funEnv就是函数变量*)
@@ -225,7 +225,7 @@ and typTopdec (Prog topdecs) =
                       cherkfun (rTy, name, argTy, body) 
                 | Vardec(t, var)-> None)
               topdecs
-
+  TypN
 (*检查函数入口*)
 (*let typeCheck filename = typTopdec (fromFile filename);;*)
 
