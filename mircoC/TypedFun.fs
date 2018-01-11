@@ -47,21 +47,19 @@ type Var =
 (* The variable environment keeps track of global and local variables, and 
    keeps track of next available offset for local variables *)
 
-type VarEnv = (Var * typ) Env * int   (*(string * (Var * typ)) list * int *)
-type findType (var : Var) (varEnv: VarEnv):typ=
-	let (env,fdepth) = varEnv
-	let (_,addr) = var
-	let rec find env = 
+type VarEnv = (Var * typ) Env * int   (*(string * (('a * int) * typ)) list * int *)
+let findType (var : Var) (varEnv : VarEnv) : typ =
+    let (env,fdepth) = varEnv (*env : (Var * typ) Env*)
+    (* match var with
+    //  | Glovar x -> let addr = x
+    //  | Locvar x -> let addr = x*)
+    printf "env: %A\n" env  //Debuging code 
+    let rec find env : typ = 
         match env with
-        | [] ->failwith(" ")
-        | (y,v)::yr -> let ((_,addr1),x) = v
-	                   if addr1 = addr then x
-                       else find yr 
-    find env 
-	
-	
-			  
-		
+        | [] -> failwith("Cannot find the type ")
+        | (_, (x, typvar)) :: envr -> if  x = var then typvar 
+                                                else find envr 
+    find env
 (* The function environment maps function name to label and parameter decs *)
 
 type Paramdecs = (typ * string) list
@@ -71,7 +69,7 @@ type FunEnv = (label * typ option * Paramdecs) Env
 
 let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * instr list =
     printf "allocate called!\n"      
-    let (env, fdepth) = varEnv 
+    let (env,fdepth) = varEnv 
     match typ with
     | TypA (TypA _, _) -> 
       raise (Failure "allocate: array of arrays not permitted")
@@ -178,11 +176,12 @@ let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
         TypI
 (*如何检查list 遍历es*)
 (*Access*)
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-and typAccess access varEnv funEnv : typ =
+and typAccess access (varEnv:VarEnv) funEnv : typ =
   match access with
-   | AccVar x-> TypI
-      (*match lookup varEnv x with
+   | AccVar x-> (* TypI*)
+        let (data,a) = lookup (fst varEnv) x
+        findType data varEnv
+        (*match lookup varEnv x with
       | Glovar addr,_ -> TypI
       | Locvar addr,_ -> TypI  (*如何用地址找到类型*)*)
    | AccDeref e -> typExpr e varEnv funEnv
