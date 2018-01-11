@@ -47,8 +47,21 @@ type Var =
 (* The variable environment keeps track of global and local variables, and 
    keeps track of next available offset for local variables *)
 
-type VarEnv = (Var * typ) Env * int
-
+type VarEnv = (Var * typ) Env * int   (*(string * (Var * typ)) list * int *)
+type findType (var : Var) (varEnv: VarEnv):typ=
+	let (env,fdepth) = varEnv
+	let (_,addr) = var
+	let rec find env = 
+        match env with
+        | [] ->failwith(" ")
+        | (y,v)::yr -> let ((_,addr1),x) = v
+	                   if addr1 = addr then x
+                       else find yr 
+    find env 
+	
+	
+			  
+		
 (* The function environment maps function name to label and parameter decs *)
 
 type Paramdecs = (typ * string) list
@@ -165,6 +178,7 @@ let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
         TypI
 (*如何检查list 遍历es*)
 (*Access*)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 and typAccess access varEnv funEnv : typ =
   match access with
    | AccVar x-> TypI
