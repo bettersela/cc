@@ -124,7 +124,7 @@ let makeGlobalEnvs (topdecs : topdec list) : VarEnv * FunEnv * instr list =
 (* 环境是什么？是env 还是varEnv和funEnv*)
 let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ = 
     match e with
-    | Access acc -> TypI
+    | Access acc -> typAccess acc varEnv funEnv
     | Assign(acc, e) ->
       let t1 = typAccess acc varEnv funEnv
       let t2 = typExpr e varEnv funEnv
