@@ -1,0 +1,26 @@
+// micro-C example 4 -- compute and print array of factorials
+
+int a[20];			/* Must be global */
+
+void main(int n) { 
+  int i; 
+  i = 0; 
+  int f; 
+  f = 1;
+  while (i < n) {
+    a[i] = f;
+    i = i + 1;
+    f = f * i;
+  }
+  int * b;
+  printarr(n, b);
+}
+
+void printarr(int len, int a[]) {
+  int i; 
+  i = 0; 
+  while (i < len) { 
+    print a[i]; 
+    i=i+1; 
+  } 
+}

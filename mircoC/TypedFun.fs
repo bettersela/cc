@@ -34,6 +34,7 @@ open System.IO
 type 'data Env = (string * 'data) list
 
 let rec lookup env x = 
+    (*printfn "\n  lookup %A\n" env*) (*debugging code*)
     match env with 
     | []         -> failwith (x + " not found")
     | (y, v)::yr -> if x=y then v else lookup yr x
@@ -48,17 +49,20 @@ type Var =
    keeps track of next available offset for local variables *)
 
 type VarEnv = (Var * typ) Env * int   (*(string * (('a * int) * typ)) list * int *)
+
 let findType (var : Var) (varEnv : VarEnv) : typ =
+    (*printfn "\n  findType: var: %A, varEnv: %A\n" var varEnv*)(*debugging code*)
     let (env,fdepth) = varEnv (*env : (Var * typ) Env*)
-    (* match var with
-    //  | Glovar x -> let addr = x
-    //  | Locvar x -> let addr = x*)
-    printf "env: %A\n" env  //Debuging code 
     let rec find env : typ = 
         match env with
-        | [] -> failwith("Cannot find the type ")
-        | (_, (x, typvar)) :: envr -> if  x = var then typvar 
-                                                else find envr 
+        | [] -> failwith "Cannot find the type var in varEnv" (*failwith*)
+        | (_, (x, typvar)) :: envr -> if x = var then 
+                                             (*printfn "typvar:%A\n" typvar*)(*debugging code*)
+                                             match typvar with
+                                             | TypA (t, Some i) -> t
+                                             | TypP typ -> typ
+                                             | _ -> typvar 
+                                      else find envr
     find env
 (* The function environment maps function name to label and parameter decs *)
 
@@ -67,8 +71,7 @@ type FunEnv = (label * typ option * Paramdecs) Env
 
 (* Bind declared variable in env and generate code to allocate it: *)
 
-let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * instr list =
-    printf "allocate called!\n"      
+let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * instr list = 
     let (env,fdepth) = varEnv 
     match typ with
     | TypA (TypA _, _) -> 
@@ -81,7 +84,7 @@ let allocate (kind : int -> Var) (typ, x) (varEnv : VarEnv) : VarEnv * instr lis
       let newEnv = ((x, (kind (fdepth), typ)) :: env, fdepth+1)
       let code = [INCSP 1]
 
-      printf "new varEnv: %A\n" newEnv // 调试 显示分配后环境变化
+      (*printf "new varEnv: %A\n" newEnv*)  (*debugging code调试 显示分配后环境变化*)
       (newEnv, code)
 
 (* Bind declared parameters in env: *)
@@ -98,7 +101,6 @@ let bindParams paras ((env, fdepth) : VarEnv) : VarEnv =
 
 let makeGlobalEnvs (topdecs : topdec list) : VarEnv * FunEnv * instr list = 
     let rec addv decs varEnv funEnv = 
-        printf "Global funEnv: %A\n" funEnv  
         match decs with 
         | []         -> (varEnv, funEnv, [])
         | dec::decr  -> 
@@ -121,31 +123,38 @@ let makeGlobalEnvs (topdecs : topdec list) : VarEnv * FunEnv * instr list =
 
 (* Type checking for the first-order functional language: *)
 
-(* 环境是什么？是env 还是varEnv和funEnv*)
 let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ = 
+    (*printf "expr in typExpr:%A\n" funEnv*) (*debugging code*)
     match e with
     | Access acc -> typAccess acc varEnv funEnv
     | Assign(acc, e) ->
       let t1 = typAccess acc varEnv funEnv
       let t2 = typExpr e varEnv funEnv
       if t1 = t2 then t1
-      else failwith "wrong!"
+      else 
+          printf "WRONG INFO: Fail to Assign %A to %A, for %A does not match %A\n" e acc t2 t1
+          failwith "WRONG!\n"
     | CstI i -> TypI
     | Addr acc -> TypI  (*需要找一个方法把TypP找出来*)
     | Prim1(ope, e1) -> 
         let t1 = typExpr e1 varEnv funEnv
-        let t2 = TypN
+        let t2 = ref TypN
         match ope with
-        | "!" -> t2 = TypI
-        | "printi" -> t2 = TypC
-        | "printc" -> t2 = TypC
-        if t1 = t2 then t1
-        else failwith "Wrong Prim1"
+        | "!" -> t2 := TypI
+        | "printi" -> t2 := TypI
+        | "printc" -> t2 := TypC
+        (*printf "ope:%A" (ope,t1,t2)*) (*debugging code*)
+        if t1 = !t2 then t1
+        else 
+             printf "WRONG INFO: Fail to operate %A on %A, for %A does not match %A\n" ope e1 t1 t2
+             failwith "Wrong Prim1: type of e1 and t2 dismatch\n" (*failwith*)
     | Prim2(ope,e1,e2)->
         let t1 = typExpr e1 varEnv funEnv
         let t2 = typExpr e2 varEnv funEnv
         if t1 = t2 then t1
-        else failwith"Wrong at Prim2" 
+        else 
+             printf "WRONG INFO: Fail to operate %A on %A and %A, for %A does not match %A\n" ope e1 e2 t1 t2
+             failwith "Wrong Prim2: type of e1 and type of e2 dismatch\n" (*failwith*)
         match (ope, t1, t2) with
         | ("*", TypI, TypI) -> TypI
         | ("+", TypI, TypI) -> TypI
@@ -158,17 +167,21 @@ let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
         | (">=", TypI, TypI) -> TypI
         | (">", TypI, TypI) -> TypI
         | ("<=", TypI, TypI) -> TypI
-        | _   -> failwith "unknown op, or type error"
+        | _   -> failwith ("Unknown op"+ope+", or type error\n")
     | Andalso(e1, e2) ->
         let t1 = typExpr e1 varEnv funEnv
         let t2 = typExpr e2 varEnv funEnv
         if t1 = t2 then TypI
-        else failwith "Diffierent type between Andalso(e1,e2) " 
+        else 
+             printf "WRONG INFO: Operands on both sides of 'and' dismatch, for %A does not match %A\n" t1 t2
+             failwith "Diffierent type between Andalso(e1 , e2)\n" (*failwith*)
     | Orelse(e1, e2) ->
         let t1 = typExpr e1 varEnv funEnv
         let t2 = typExpr e2 varEnv funEnv
         if t1 = t2 then TypI
-        else failwith "Diffierent type between Orelse(e1,e2) " 
+        else 
+             printf "WRONG INFO: Operands on both sides of 'or' dismatch, for %A does not match %A\n" t1 t2
+             failwith "Diffierent type between Orelse(e1 , e2)\n" (*failwith*)
     | Call(f, es) -> 
         (*Map typExpr es varEnv funEnv*)
         (*let (labf, tyOpt, paras) = lookup funEnv f
@@ -177,46 +190,65 @@ let rec typExpr (e:expr) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
 (*如何检查list 遍历es*)
 (*Access*)
 and typAccess access (varEnv:VarEnv) funEnv : typ =
+  (*printf "varEnv in typAccess:%A\n" varEnv*) (*debugging code*)
   match access with
    | AccVar x-> (* TypI*)
         let (data,a) = lookup (fst varEnv) x
-        findType data varEnv
+        let typeAcc = findType data varEnv
+        match typeAcc with
+           | TypA (typ,_) -> typ
+           | TypP typ -> typ
+           | _ -> typeAcc
         (*match lookup varEnv x with
       | Glovar addr,_ -> TypI
       | Locvar addr,_ -> TypI  (*如何用地址找到类型*)*)
    | AccDeref e -> typExpr e varEnv funEnv
    | AccIndex(acc,idx)-> typAccess acc varEnv funEnv
-   | _ -> failwith"Wrong access!"
+   | _ -> failwith "Wrong at access!"
 
 (*StmtOrDec*)
 and typStmtOrDec stmtOrDec (varEnv : VarEnv) (funEnv : FunEnv) : VarEnv *typ =
   match stmtOrDec with
    | Stmt stmt -> (varEnv,typStmt stmt varEnv funEnv)
    | Dec (typ, x)-> let (newVar,_)=allocate Locvar (typ, x) varEnv
+                    (*printf "DEC: %A\n" newVar*) (*debugging code*)
                     (newVar,typ)
 
 and  typStmt (e : stmt) (varEnv : VarEnv) (funEnv : FunEnv) : typ =
+    (*printf "stmt in typStmt:%A\n" e *)(*debugging code*)
     match e with
     |If(e1,stmt1,stmt2)->
       match typExpr e1 varEnv funEnv with
-      | TypI -> let t1 = typStmt stmt1 varEnv funEnv
+      | TypI ->(* let t1 = typStmt stmt1 varEnv funEnv
                 let t2 = typStmt stmt2 varEnv funEnv
+                printf "In If %A\n" (stmt1,stmt2,t1,t2)
                 if t1 = t2 then t1
-                else failwith "You have wrong type after your if experssion." 
-      | _ -> failwith "You have wrong type after your if experssion."
+                else failwith "You have wrong type after your if experssion." *)
+                typStmt stmt1 varEnv funEnv
+                typStmt stmt2 varEnv funEnv
+                TypN
+      | _ -> failwith "Type dismatch in 'if' expression of e1\n" (*failwith*)
     |While(e, body)->
-        if typExpr e varEnv funEnv = TypI then typStmt body varEnv funEnv
-        else failwith "Wrong with While"
+        (*printf "in while %A\n" e *)(*debugging code*)
+        let TypeExpr = typExpr e varEnv funEnv
+        if TypeExpr = TypI then typStmt body varEnv funEnv
+        else 
+             printf "WRONG INFO: 'while' expression types dismatch, for %A does not match %A\n" TypeExpr TypI
+             failwith "Wrong in while\n" (*failwith*)
     |Expr e -> typExpr e varEnv funEnv
     |Block stmts -> 
         let rec loop stmts varEnv = 
             match stmts with
-            | [] -> (varEnv,TypN)
+            | [] -> 
+                    (*printf "block[] %A\n" stmts *)(*debugging code*)
+                    (varEnv,TypN)
             | s1::sr -> 
+                (*printf "block %A\n" s1 *)(*debugging code*)
                 let (v1, t1) = typStmtOrDec s1 varEnv funEnv
-                let (fdepthr, t2) = loop sr varEnv
+                (*printf "block %A\n" v1 *)(*debugging code*)
+                let (fdepthr, t2) = loop sr v1
                 (v1,t2)
-                
+        loop stmts varEnv
         TypN
     | Return None -> TypN
     | Return (Some e)->
@@ -230,14 +262,16 @@ and typTopdec (Prog topdecs): typ  =
   let cherkfun (tyOpt, f, xs, body) =
       let (labf, _, paras) = lookup funEnv f
       let (envf, fdepthf) = bindParams paras (globalVarEnv, 0)
+      (*printf "env:%A\n" (envf,fdepthf)*) (*debugging code*)
       let typRet = typStmt body (envf, fdepthf) funEnv
-      printf"OK!%A\n" body
+      (*printf "body:%A\n" body*)(*debugging code*)
       None
   List.choose(function
                 | Fundec (rTy, name, argTy, body) -> 
-                      cherkfun (rTy, name, argTy, body) 
+                      cherkfun (rTy, name, argTy, body)
                 | Vardec(t, var)-> None)
               topdecs
+  printf "%A\nTypecheck is FINE!\n" topdecs
   TypN
 (*检查函数入口*)
 (*let typeCheck filename = typTopdec (fromFile filename);;*)
